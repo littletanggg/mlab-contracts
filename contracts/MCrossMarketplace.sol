@@ -15,6 +15,9 @@ contract MCrossMarketplace is Ownable {
     uint256 private itemCount = 0;
     address public nftContract;
 
+    // List of all market items 
+	uint256[] private marketitems;
+
     struct MarketItem {
         address nftContract;
         uint256 tokenId;
@@ -63,14 +66,12 @@ contract MCrossMarketplace is Ownable {
         require(price > 0, "price must be at least 1 wei");
         require(_tokenId > 0, "token id must greater than 0");
 
-        // update item if item exist
         MarketItem memory item = tokenIdMarketItems[_tokenId];
         if(item.tokenId == _tokenId || item.status == ListingStatus.Sold){
             tokenIdMarketItems[_tokenId].price = price;
             tokenIdMarketItems[_tokenId].owner = msg.sender;
             tokenIdMarketItems[_tokenId].status = ListingStatus.Active;
         } else {
-            // create item
             item = MarketItem(
                 nftContract,
                 _tokenId,
@@ -78,19 +79,21 @@ contract MCrossMarketplace is Ownable {
                 price,
                 ListingStatus.Active
             );
+            marketitems.push(_tokenId);
             tokenIdMarketItems[_tokenId] = item;
             itemCount++;
         }
 
-        // IERC721(nftContract).transferFrom(item.owner, address(this), item.tokenId);
+        IERC721(nftContract).transferFrom(item.owner, address(this), item.tokenId);
         emit List(item.nftContract, _tokenId, msg.sender, price, item.status);
     }
 
     function getMarketItems() external view returns(MarketItem[] memory){
         MarketItem[] memory  items = new MarketItem[](itemCount);
-        
-        for(uint i = 0; i < itemCount; i++) {
-            items[i] = tokenIdMarketItems[i+1];
+
+        for(uint256 i = 0; i < marketitems.length; i++) {
+            uint256 _tokenId = marketitems[i];
+            items[i] = tokenIdMarketItems[_tokenId];
         }
 
         return items;
@@ -98,14 +101,17 @@ contract MCrossMarketplace is Ownable {
 
     function getMyMarketplace(address _owner) external view returns(MarketItem[] memory) {
         require(msg.sender == _owner, "only owner can get my marketplace item");
-        MarketItem[] memory  items = new MarketItem[](itemCount);
+        MarketItem[] memory items = new MarketItem[](itemCount);
 
-        for(uint i = 0; i < itemCount; i++) {
+        for(uint i = 0; i < marketitems.length; i++) {
+
+            uint256 _tokenId = marketitems[i];
+
             if(
-                tokenIdMarketItems[i+1].owner == _owner && 
-                tokenIdMarketItems[i+1].status == ListingStatus.Active
+                tokenIdMarketItems[_tokenId].owner == _owner && 
+                tokenIdMarketItems[_tokenId].status == ListingStatus.Active
             ){
-                items[i] = tokenIdMarketItems[i+1];
+                items[i] = tokenIdMarketItems[_tokenId];
             }
         }
         return items;
@@ -120,7 +126,7 @@ contract MCrossMarketplace is Ownable {
         
         tokenIdMarketItems[_tokenId].status = ListingStatus.Cancelled;
 
-        // IERC721(item.nftContract).transferFrom(address(this), item.owner, item.tokenId);
+        IERC721(item.nftContract).transferFrom(address(this), item.owner, item.tokenId);
         emit Cancel (_tokenId, item.owner);
     }
 
@@ -134,7 +140,7 @@ contract MCrossMarketplace is Ownable {
 
         tokenIdMarketItems[_tokenId].status = ListingStatus.Sold;
 
-        // IERC721(nftContract).transferFrom(address(this), msg.sender, item.tokenId);
+        IERC721(nftContract).transferFrom(address(this), msg.sender, item.tokenId);
         payable(item.owner).transfer(item.price);
 
         emit Sale(
